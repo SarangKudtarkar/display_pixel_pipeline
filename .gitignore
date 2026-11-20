@@ -1,0 +1,15 @@
+*.log
+*.key
+*.history
+*.dsn
+*.trn
+*.vcd
+*.fsdb
+*.wlf
+*.jou
+*.tmp
+xcelium.d/
+INCA_libs/
+simvision/
+jaspergold/
+__pycache__/
