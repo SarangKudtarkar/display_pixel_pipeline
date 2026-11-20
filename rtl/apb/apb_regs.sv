@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module apb_regs (
     input  logic        pclk,
     input  logic        presetn,
