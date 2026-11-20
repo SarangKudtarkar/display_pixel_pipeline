@@ -59,3 +59,40 @@ for the exact commands and tool requirements.
 
 Add your architecture diagram, simulation waveform screenshots,
 coverage summary, and JasperGold proof summary before publishing.
+
+## Architecture Diagram
+
+```mermaid
+flowchart TB
+    TB["UVM Testbench"]
+
+    subgraph DUT["Display Subsystem"]
+        APB["APB Register Interface"]
+        REG["Display Configuration Registers"]
+        ENABLE["Display Enable Control"]
+
+        subgraph PIPE["Display Pixel Pipeline"]
+            TIMING["VGA Timing Generator"]
+            FIFO["Pixel FIFO"]
+            COLOR["Color Converter"]
+        end
+
+        OUTPUT["Display Outputs"]
+    end
+
+    TB -->|"APB Read/Write"| APB
+    APB --> REG
+    REG -->|"Timing Configuration"| TIMING
+    REG -->|"Pixel Format"| COLOR
+    REG --> ENABLE
+    TIMING -->|"Pixel Coordinates and Sync"| OUTPUT
+    TIMING -->|"Active Video"| ENABLE
+    ENABLE -->|"Gated Active Video"| OUTPUT
+
+    SOURCE["Pixel Data Source"] -->|"Pixel Data"| FIFO
+    FIFO -->|"Buffered Pixels"| COLOR
+    COLOR -->|"Converted Pixel Data"| OUTPUT
+    OUTPUT -->|"Display Status"| TB
+
+    ASSERT["SVA Assertions"] -.-> DUT
+    FORMAL["JasperGold Formal Verification"] -.-> DUT
