@@ -1,65 +1,61 @@
 # Display Pixel Pipeline Validation Environment
 
-## Overview
+## Project Overview
 
-A small display controller and pixel pipeline verification project.
+A SystemVerilog-based display pixel pipeline verification environment
+using Xcelium, UVM, SystemVerilog Assertions, JasperGold, and Python.
 
-### DUT blocks
+## Design Features
 
-- APB configuration register block
-- VGA timing generator
+- VGA timing generation
 - Pixel FIFO
-- Pixel format converter
-- Power management FSM
-- Display output interface
+- Color conversion
+- APB programmable register interface
+- Display subsystem integration
+- Configurable display timing
 
-### Verification goals
+## Verification Features
 
 - APB register read/write verification
-- Horizontal and vertical timing verification
-- Pixel active-region checking
-- FIFO underrun and overflow testing
-- Mid-frame configuration testing
-- Low-power entry and wake-up testing
-- SVA-based protocol checking
+- UVM-based testbench
+- SystemVerilog Assertions
+- Functional coverage
+- Regression automation
 - JasperGold formal verification
-- Python regression log triage
+- Python-based log triage
+
+## Project Structure
+
+- `rtl/` — RTL design
+- `sim/uvm/` — UVM verification environment
+- `formal/` — Formal verification sources
+- `scripts/` — Simulation and automation scripts
+- `logs/` — Simulation and formal logs
+- `docs/` — Project documentation
+- `cov_work/` — Coverage database
+
+## Verification Status
+
+- Phase 5: UVM completion marker detected
+- Phase 6: Coverage database generated; coverage results require review
+- Phase 7: Formal log generated; individual proof results require review
+- Phase 8: Python log triage completed
 
 ## Tools
 
 - SystemVerilog
 - UVM
-- Cadence Xcelium
+- Synopsys VCS/Xcelium-compatible simulation workflow (record the actual simulator used)
 - Cadence JasperGold
-- SimVision / Verisium Debug
 - Python 3
+- Linux
 
-## Initial implementation status
+## Execution
 
-This repository is a starter scaffold. The UVM monitor, APB agent,
-reference model, scoreboard, functional coverage, and constrained-random
-sequences must be implemented and connected before claiming UVM coverage.
+See the scripts in `scripts/` and phase documentation in `docs/`
+for the exact commands and tool requirements.
 
-The formal properties also require complete assumptions, reset handling,
-and proof review before claiming formal sign-off.
+## Author Notes
 
-## Build
-
-```bash
-make help
-make sim
-make triage
-```
-
-Requires a licensed Cadence installation and configured tool environment.
-
-## Planned milestones
-
-1. Complete synthesizable RTL and register specification.
-2. Build APB UVM agent and output monitor.
-3. Implement reference model and scoreboard.
-4. Add directed and constrained-random sequences.
-5. Add assertions and functional coverage.
-6. Prove timing and power FSM properties.
-7. Automate regression and failure triage.
-8. Document debug findings and coverage closure.
+Add your architecture diagram, simulation waveform screenshots,
+coverage summary, and JasperGold proof summary before publishing.
