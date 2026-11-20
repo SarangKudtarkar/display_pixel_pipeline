@@ -11,17 +11,17 @@ module power_fsm (
 );
 
     typedef enum logic [1:0] {
-        ACTIVE,
-        IDLE,
-        GATED,
-        WAKE
+        ACTIVE_ST,
+        IDLE_ST,
+        GATED_ST,
+        WAKE_ST
     } state_t;
 
     state_t state, next_state;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
-            state <= ACTIVE;
+            state <= ACTIVE_ST;
         else
             state <= next_state;
     end
@@ -30,28 +30,25 @@ module power_fsm (
         next_state = state;
 
         case (state)
-            ACTIVE: begin
+            ACTIVE_ST:
                 if (idle_req)
-                    next_state = IDLE;
-            end
+                    next_state = IDLE_ST;
 
-            IDLE: begin
+            IDLE_ST:
                 if (idle_req)
-                    next_state = GATED;
+                    next_state = GATED_ST;
                 else
-                    next_state = ACTIVE;
-            end
+                    next_state = ACTIVE_ST;
 
-            GATED: begin
+            GATED_ST:
                 if (wake_req)
-                    next_state = WAKE;
-            end
+                    next_state = WAKE_ST;
 
-            WAKE: begin
-                next_state = ACTIVE;
-            end
+            WAKE_ST:
+                next_state = ACTIVE_ST;
 
-            default: next_state = ACTIVE;
+            default:
+                next_state = ACTIVE_ST;
         endcase
     end
 
@@ -61,10 +58,9 @@ module power_fsm (
         gated  = 1'b0;
 
         case (state)
-            ACTIVE: active = 1'b1;
-            IDLE:   idle   = 1'b1;
-            GATED:  gated  = 1'b1;
-            WAKE:   active = 1'b1;
+            ACTIVE_ST, WAKE_ST: active = 1'b1;
+            IDLE_ST:             idle   = 1'b1;
+            GATED_ST:            gated  = 1'b1;
             default: ;
         endcase
     end

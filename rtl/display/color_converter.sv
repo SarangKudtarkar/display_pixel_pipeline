@@ -14,10 +14,10 @@ module color_converter (
         b = pixel_in[7:0];
 
         case (format_sel)
-            2'b00: pixel_out = {r, g, b};
-            2'b01: pixel_out = {b, g, r};
-            2'b10: pixel_out = {g, r, b};
-            2'b11: pixel_out = {r, r, r};
+            2'd0: pixel_out = {r,g,b};
+            2'd1: pixel_out = {b,g,r};
+            2'd2: pixel_out = {g,r,b};
+            2'd3: pixel_out = {r,b,g};
             default: pixel_out = pixel_in;
         endcase
     end
