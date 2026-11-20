@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-11-20T07:17:51",
+  "project": "display_pixel_pipeline",
+  "phase5": "NOT RUN \u2014 completion marker not found",
+  "phase6": "NOT RUN \u2014 completion marker not found",
+  "phase7": "NOT RUN \u2014 no formal logs/reports found",
+  "uvm_error_count_across_scanned_logs": 0,
+  "uvm_fatal_count_across_scanned_logs": 0,
+  "scanned_log_count": 0,
+  "rtl_systemverilog_files": [
+    "rtl/apb/apb_regs.sv",
+    "rtl/bus/apb_regs.sv",
+    "rtl/common/display_pkg.sv",
+    "rtl/display/color_converter.sv",
+    "rtl/display/display_top.sv",
+    "rtl/display/pixel_fifo.sv",
+    "rtl/display/vga_timing_gen.sv",
+    "rtl/pixel/color_convert.sv",
+    "rtl/pixel/pixel_fifo.sv",
+    "rtl/power/power_ctrl.sv",
+    "rtl/power/power_fsm.sv",
+    "rtl/timing/vga_timing_gen.sv",
+    "rtl/top/display_subsystem_top.sv",
+    "rtl/top/display_top.sv"
+  ],
+  "uvm_files": [
+    "sim/uvm/apb_if.sv",
+    "sim/uvm/display_uvm_pkg.sv",
+    "sim/uvm/phase5_uvm_tb.sv"
+  ],
+  "scanned_logs": []
+}
