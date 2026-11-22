@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Display Pixel Pipeline Interactive Series</title>
+<meta name="description" content="Interactive walkthrough of a display pixel pipeline: APB registers, VGA timing, pixel FIFO, color conversion, and the UVM / SVA / JasperGold verification flow.">
+<style>
+:root{
+  --bg:#0b1020; --panel:#121a33; --panel2:#18224a; --line:#2a3566;
+  --text:#e6ebff; --muted:#8f9bc0; --accent:#5eead4; --accent2:#fbbf24;
+  --hs:#60a5fa; --vs:#f472b6; --bad:#f87171; --good:#4ade80;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--accent)}
+nav{position:sticky;top:0;z-index:10;background:rgba(11,16,32,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;align-items:center}
+nav b{margin-right:10px;font-size:14px;letter-spacing:.04em}
+nav a{color:var(--muted);text-decoration:none;font-size:13px;padding:4px 10px;border-radius:999px;border:1px solid transparent}
+nav a:hover{color:var(--text);border-color:var(--line)}
+header.hero{padding:56px 16px 24px;max-width:1000px;margin:0 auto}
+.hero h1{font-size:clamp(28px,5vw,46px);line-height:1.15;margin:0 0 12px}
+.hero p{color:var(--muted);max-width:720px;margin:0 0 18px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:12px var(--mono);padding:4px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+section{max-width:1000px;margin:0 auto;padding:40px 16px;border-top:1px solid var(--line)}
+section h2{margin:0 0 6px;font-size:26px}
+section h2 span{color:var(--accent);font:600 14px var(--mono);margin-right:10px}
+.lead{color:var(--muted);margin:0 0 20px;max-width:760px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0}
+button,select,input[type=color]{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.on{background:var(--accent);color:#04130f;border-color:var(--accent)}
+input[type=range]{accent-color:var(--accent)}
+label{font-size:13px;color:var(--muted)}
+.mono{font-family:var(--mono)}
+.note{font-size:13px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+svg text{font-family:system-ui,sans-serif}
+
+/* architecture */
+#arch{width:100%;height:auto;display:block}
+.node rect{fill:var(--panel2);stroke:var(--line);stroke-width:1.5;rx:10;transition:.15s}
+.node text{fill:var(--text);font-size:13px;text-anchor:middle;pointer-events:none}
+.node:hover rect,.node.sel rect{stroke:var(--accent);fill:#1d2a5c}
+.node{cursor:pointer}
+.edge{fill:none;stroke:var(--muted);stroke-width:1.6;marker-end:url(#ah)}
+.edge.hl{stroke:var(--accent);stroke-width:2.4}
+#overlay{display:none}
+#overlay.show{display:block}
+#info{margin-top:12px;min-height:84px}
+#info h4{margin:0 0 4px;color:var(--accent)}
+
+/* vga */
+#vga{width:100%;height:auto;background:#000;border-radius:10px;image-rendering:pixelated;display:block}
+.stat{display:flex;gap:18px;flex-wrap:wrap;font:13px var(--mono);margin-top:8px}
+.pill{padding:2px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line)}
+.pill.hs.on{background:var(--hs);color:#04101f}
+.pill.vs.on{background:var(--vs);color:#210614}
+.pill.av.on{background:var(--good);color:#04160a}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+
+/* fifo */
+#cells{display:flex;gap:6px;margin:10px 0}
+.cell{flex:1;height:54px;border:1px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;font:11px var(--mono);color:#0b1020;transition:background .2s}
+.flag{font:12px var(--mono);padding:3px 8px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}
+.flag.on{color:#fff;background:#7f1d1d;border-color:var(--bad)}
+.flag.ok.on{background:#14532d;border-color:var(--good)}
+
+/* color */
+.bits{font:13px var(--mono);word-break:break-all}
+.bits .r{color:#f87171}.bits .g{color:#4ade80}.bits .b{color:#60a5fa}.bits .y{color:#e5e7eb}
+.sw{height:70px;border-radius:10px;border:1px solid var(--line)}
+
+/* waveform */
+#wave{width:100%;height:auto;display:block;background:#0e1530;border-radius:10px}
+.stepline{margin-top:10px;font-size:14px}
+.stepline b{color:var(--accent2)}
+
+/* verification */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+pre{background:#0a0f22;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font:13px/1.5 var(--mono);margin:0}
+.k{color:#c084fc}.c{color:#6b7bb0}.s{color:#fbbf24}
+.phases{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+@media(max-width:760px){.phases{grid-template-columns:1fr 1fr}}
+.ph{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px}
+.ph b{display:block;color:var(--accent);margin-bottom:4px}
+.ph em{display:block;margin-top:6px;color:var(--accent2);font-style:normal;font-size:12px}
+.tree{font:13px/1.7 var(--mono);color:var(--muted)}
+.tree b{color:var(--text)}
+footer{max-width:1000px;margin:0 auto;padding:30px 16px 60px;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<nav>
+  <b>PIXEL PIPELINE</b>
+  <a href="#arch-s">Architecture</a>
+  <a href="#timing">VGA timing</a>
+  <a href="#fifo-s">Pixel FIFO</a>
+  <a href="#color">Color convert</a>
+  <a href="#apb">APB regs</a>
+  <a href="#verif">Verification</a>
+</nav>
+
+<header class="hero">
+  <h1>Display Pixel Pipeline<br>Interactive Series</h1>
+  <p>A hands-on tour of a display subsystem: how software programs it over APB, how VGA timing is generated, how pixels are buffered and converted, and how the whole thing is verified with UVM, SVA and JasperGold.</p>
+  <div class="chips">
+    <span class="chip">SystemVerilog</span><span class="chip">UVM</span><span class="chip">SVA</span>
+    <span class="chip">Functional coverage</span><span class="chip">JasperGold</span><span class="chip">Python triage</span>
+  </div>
+</header>
+
+<!-- 01 ARCH -->
+<section id="arch-s">
+  <h2><span>01</span>Architecture</h2>
+  <p class="lead">Click any block to see what it does. Toggle the verification overlay to see where assertions and formal proofs attach.</p>
+  <div class="card">
+    <div class="row" style="margin-top:0">
+      <button id="ovBtn">Show verification overlay</button>
+      <span class="note">Solid arrows = data/control. Dashed = verification.</span>
+    </div>
+    <svg id="arch" viewBox="0 0 1000 420" role="img" aria-label="Display pixel pipeline architecture">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8f9bc0"/></marker>
+      </defs>
+      <g id="overlay">
+        <rect x="320" y="20" width="665" height="390" rx="16" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="7 5"/>
+        <text x="335" y="40" fill="#fbbf24" font-size="12">DUT: Display Subsystem (SVA bound here, JasperGold proves here)</text>
+        <rect x="20" y="60" width="130" height="50" rx="10" fill="none" stroke="#fbbf24" stroke-dasharray="5 4"/>
+        <text x="85" y="90" fill="#fbbf24" font-size="12" text-anchor="middle">SVA + Formal</text>
+      </g>
+      <!-- edges -->
+      <path class="edge" data-e="tb apb" d="M130 198H170"/>
+      <path class="edge" data-e="apb regs" d="M290 198H340"/>
+      <path class="edge" data-e="regs timing" d="M405 170V78H540"/>
+      <path class="edge" data-e="regs enable" d="M470 198H540"/>
+      <path class="edge" data-e="timing enable" d="M610 106V170"/>
+      <path class="edge" data-e="enable output" d="M680 198H840"/>
+      <path class="edge" data-e="timing output" d="M680 78H905V170"/>
+      <path class="edge" data-e="regs color" d="M405 226V290H720V320"/>
+      <path class="edge" data-e="source fifo" d="M460 348H520"/>
+      <path class="edge" data-e="fifo color" d="M620 348H660"/>
+      <path class="edge" data-e="color output" d="M780 348H905V226"/>
+      <!-- nodes -->
+      <g class="node" data-n="tb"><rect x="20" y="170" width="110" height="56"/><text x="75" y="203">UVM TB</text></g>
+      <g class="node" data-n="apb"><rect x="170" y="170" width="120" height="56"/><text x="230" y="203">APB interface</text></g>
+      <g class="node" data-n="regs"><rect x="340" y="170" width="130" height="56"/><text x="405" y="203">Config regs</text></g>
+      <g class="node" data-n="timing"><rect x="540" y="50" width="140" height="56"/><text x="610" y="83">VGA timing gen</text></g>
+      <g class="node" data-n="enable"><rect x="540" y="170" width="140" height="56"/><text x="610" y="203">Display enable</text></g>
+      <g class="node" data-n="source"><rect x="340" y="320" width="120" height="56"/><text x="400" y="353">Pixel source</text></g>
+      <g class="node" data-n="fifo"><rect x="520" y="320" width="100" height="56"/><text x="570" y="353">Pixel FIFO</text></g>
+      <g class="node" data-n="color"><rect x="660" y="320" width="120" height="56"/><text x="720" y="353">Color converter</text></g>
+      <g class="node" data-n="output"><rect x="840" y="170" width="130" height="56"/><text x="905" y="203">Display outputs</text></g>
+    </svg>
+    <div id="info" class="card" style="background:var(--panel2)"></div>
+  </div>
+</section>
+
+<!-- 02 TIMING -->
+<section id="timing">
+  <h2><span>02</span>VGA timing</h2>
+  <p class="lead">A raster scan is just two counters. The horizontal counter sweeps through active pixels, front porch, sync, back porch; every time it wraps, the vertical counter steps. Watch the beam draw one frame.</p>
+  <div class="card">
+    <canvas id="vga" width="800" height="525"></canvas>
+    <div class="stat">
+      <span>h = <span id="hx">0</span></span><span>v = <span id="vy">0</span></span>
+      <span class="pill av" id="pAV">active</span><span class="pill hs" id="pHS">hsync</span><span class="pill vs" id="pVS">vsync</span>
+    </div>
+    <div class="legend">
+      <span><i style="background:#2a3566"></i>blanking (porches)</span>
+      <span><i style="background:var(--hs)"></i>hsync</span>
+      <span><i style="background:var(--vs)"></i>vsync</span>
+      <span><i style="background:var(--good)"></i>active video</span>
+    </div>
+    <div class="row">
+      <button id="vgaReplay">↻ Replay</button>
+      <label>Speed <select id="vgaSpeed"><option value="2500">Slow</option><option value="9000" selected>Normal</option><option value="35000">Fast</option></select></label>
+      <span class="note">Example timing: 640×480 @ 60 Hz → 800 × 525 total clocks per frame (H: 640+16+96+48, V: 480+10+2+33).</span>
+    </div>
+  </div>
+</section>
+
+<!-- 03 FIFO -->
+<section id="fifo-s">
+  <h2><span>03</span>Pixel FIFO</h2>
+  <p class="lead">The pixel source and the display scan run at different effective rates, so a FIFO decouples them. Change the rates and see what happens when it fills or drains.</p>
+  <div class="card">
+    <div class="row">
+      <label>Write (source) rate <input id="wrRate" type="range" min="0" max="100" value="55"> <span id="wrV">55</span>%</label>
+      <label>Read (display) rate <input id="rdRate" type="range" min="0" max="100" value="50"> <span id="rdV">50</span>%</label>
+    </div>
+    <div id="cells"></div>
+    <div class="row">
+      <span class="flag" id="fEmpty">empty</span><span class="flag" id="fFull">full</span>
+      <span class="flag ok on" id="fLvl">level 0/8</span>
+      <span class="flag" id="fOver">overflow attempts: 0</span>
+      <span class="flag" id="fUnder">underflow attempts: 0</span>
+    </div>
+    <div class="row">
+      <button id="fifoToggle" class="on">Pause</button>
+      <button id="fifoReset">↻ Reset</button>
+      <button id="fifoHigh">Force overflow</button>
+      <button id="fifoLow">Force underflow</button>
+    </div>
+    <p class="note">Overflow (write while full) and underflow (read while empty) are exactly the kinds of conditions an SVA property or formal proof should rule out in the real design.</p>
+  </div>
+</section>
+
+<!-- 04 COLOR -->
+<section id="color">
+  <h2><span>04</span>Color conversion</h2>
+  <p class="lead">The register file selects a pixel format. Pick a color and a format, then compare the bits going in with the bits coming out and the error introduced.</p>
+  <div class="card">
+    <div class="row">
+      <label>Input color <input id="cIn" type="color" value="#3aa6ff"></label>
+      <label>Output format
+        <select id="cFmt">
+          <option value="888">RGB888 (passthrough)</option>
+          <option value="565" selected>RGB565</option>
+          <option value="444">RGB444</option>
+          <option value="gray">Grayscale (Y)</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid2">
+      <div><div class="sw" id="swIn"></div><p class="bits" id="bIn"></p></div>
+      <div><div class="sw" id="swOut"></div><p class="bits" id="bOut"></p></div>
+    </div>
+    <p class="note" id="cErr"></p>
+    <p class="note">Grayscale uses Y = (77R + 150G + 29B) >> 8, an integer approximation of BT.601 luma. Narrow formats truncate low bits, then replicate high bits to expand back for display.</p>
+  </div>
+</section>
+
+<!-- 05 APB -->
+<section id="apb">
+  <h2><span>05</span>APB register access</h2>
+  <p class="lead">Software configures timing, pixel format and enable through APB. Every transfer is SETUP then ACCESS. Switch between write and read and replay.</p>
+  <div class="card">
+    <div class="row" style="margin-top:0">
+      <button id="apbW" class="on">Write</button>
+      <button id="apbR">Read</button>
+      <button id="apbReplay">↻ Replay</button>
+    </div>
+    <svg id="wave" viewBox="0 0 700 330"></svg>
+    <div class="stepline" id="apbText"></div>
+  </div>
+</section>
+
+<!-- 06 VERIF -->
+<section id="verif">
+  <h2><span>06</span>Verification flow</h2>
+  <p class="lead">Simulation finds bugs with stimulus, assertions catch violations at the moment they happen, formal proves they cannot happen, and Python turns logs into a triage summary.</p>
+  <div class="card">
+    <div class="tabs" id="vtabs">
+      <button data-t="uvm" class="on">UVM</button>
+      <button data-t="sva">SVA</button>
+      <button data-t="formal">Formal</button>
+      <button data-t="py">Triage</button>
+    </div>
+    <pre id="vcode"></pre>
+    <p class="note">Snippets are illustrative. Signal and class names are placeholders, rename them to match your RTL and testbench.</p>
+  </div>
+
+  <div class="phases">
+    <div class="ph"><b>Phase 5 · UVM</b>Testbench runs to completion.<em>Completion marker detected</em></div>
+    <div class="ph"><b>Phase 6 · Coverage</b>Functional coverage database generated.<em>Results need review</em></div>
+    <div class="ph"><b>Phase 7 · Formal</b>JasperGold run produces a log.<em>Per-proof results need review</em></div>
+    <div class="ph"><b>Phase 8 · Triage</b>Python summarizes logs.<em>Completed</em></div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="tree">
+<b>display_pixel_pipeline/</b><br>
+├─ rtl/ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RTL design<br>
+├─ sim/uvm/ &nbsp;UVM environment<br>
+├─ formal/ &nbsp;&nbsp;JasperGold sources<br>
+├─ scripts/ &nbsp;simulation + automation<br>
+├─ docs/ &nbsp;&nbsp;&nbsp;&nbsp;phase documentation<br>
+└─ Makefile
+    </div>
+  </div>
+</section>
+
+<footer>
+  Source: <a href="https://github.com/SarangKudtarkar/display_pixel_pipeline">github.com/SarangKudtarkar/display_pixel_pipeline</a> · Timing values and snippets on this page are teaching examples.
+</footer>
+
+<script>
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function onVisible(el, fn){
+  const io = new IntersectionObserver(es => { if(es[0].isIntersecting){ fn(); io.disconnect(); } }, {threshold:.3});
+  io.observe(el);
+}
+
+/* ---------- 01 architecture ---------- */
+const NODES = {
+  tb:{t:'UVM testbench',d:'Drives APB reads and writes, supplies pixel data, and monitors display outputs and status. Sequences, scoreboard and coverage collectors live here.'},
+  apb:{t:'APB interface',d:'Slave-side bus decoder. Converts SETUP/ACCESS transfers into register reads and writes with PREADY handshaking.'},
+  regs:{t:'Display configuration registers',d:'Holds programmable timing (active, porch, sync), the pixel format, and the display enable bit. Their values fan out to the timing generator, color converter and enable control.'},
+  timing:{t:'VGA timing generator',d:'Horizontal and vertical counters produce pixel coordinates, hsync, vsync and an active-video flag from the configured timing.'},
+  enable:{t:'Display enable control',d:'Gates active video with the enable register so nothing is shown until software turns the display on.'},
+  source:{t:'Pixel data source',d:'Upstream producer of pixel data. It writes into the FIFO whenever space is available.'},
+  fifo:{t:'Pixel FIFO',d:'Buffers pixels between the source and the display scan so short stalls do not cause visible glitches. Overflow and underflow are key properties to verify.'},
+  color:{t:'Color converter',d:'Converts buffered pixels to the format selected in the registers (for example RGB888 to RGB565 or grayscale).'},
+  output:{t:'Display outputs',d:'Pixel coordinates, sync signals and converted pixel data, plus display status reported back to the testbench.'}
+};
+function showNode(k){
+  $$('.node').forEach(n => n.classList.toggle('sel', n.dataset.n===k));
+  $$('.edge').forEach(e => e.classList.toggle('hl', e.dataset.e.split(' ').includes(k)));
+  $('#info').innerHTML = '<h4>'+NODES[k].t+'</h4>'+NODES[k].d;
+}
+$$('.node').forEach(n => n.addEventListener('click', () => showNode(n.dataset.n)));
+$('#ovBtn').addEventListener('click', e => {
+  const on = $('#overlay').classList.toggle('show');
+  e.target.textContent = on ? 'Hide verification overlay' : 'Show verification overlay';
+});
+showNode('regs');
+
+/* ---------- 02 VGA timing ---------- */
+(function(){
+  const HA=640,HF=16,HS=96,HB=48,HT=HA+HF+HS+HB;
+  const VA=480,VF=10,VS=2,VB=33,VT=VA+VF+VS+VB;
+  const cv=$('#vga'), ctx=cv.getContext('2d');
+  const img=ctx.createImageData(HT,VT), d=img.data;
+  const bars=[[235,235,235],[235,235,20],[20,235,235],[20,235,20],[235,20,235],[235,20,20],[20,20,235],[20,20,20]];
+  let pos=0, speed=+$('#vgaSpeed').value, raf=null;
+  function reset(){
+    for(let i=0;i<d.length;i+=4){d[i]=11;d[i+1]=16;d[i+2]=32;d[i+3]=255}
+    pos=0;
+  }
+  function paint(i){
+    const x=i%HT, y=(i/HT)|0;
+    const hs = x>=HA+HF && x<HA+HF+HS;
+    const vs = y>=VA+VF && y<VA+VF+VS;
+    let c;
+    if(x<HA && y<VA){
+      if(y>VA-70){ const g=Math.round(x/HA*255); c=[g,g,g]; }
+      else c=bars[(x/80)|0];
+    } else if(hs && y<VA){ c=[60,110,190]; }
+    else if(vs){ c=[190,70,130]; }
+    else c=[42,53,102];
+    const o=i*4; d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];
+  }
+  function flags(i){
+    const x=i%HT, y=(i/HT)|0;
+    $('#hx').textContent=x; $('#vy').textContent=y;
+    $('#pAV').classList.toggle('on', x<HA&&y<VA);
+    $('#pHS').classList.toggle('on', x>=HA+HF&&x<HA+HF+HS);
+    $('#pVS').classList.toggle('on', y>=VA+VF&&y<VA+VF+VS);
+  }
+  function frame(){
+    const end=Math.min(pos+speed, HT*VT);
+    for(let i=pos;i<end;i++) paint(i);
+    pos=end;
+    ctx.putImageData(img,0,0);
+    if(pos<HT*VT){
+      const x=pos%HT, y=(pos/HT)|0;
+      ctx.fillStyle='#fff'; ctx.fillRect(x-3,y-3,7,7);
+      flags(pos); raf=requestAnimationFrame(frame);
+    } else { flags(HT*VT-1); raf=null; }
+  }
+  function play(){ cancelAnimationFrame(raf); reset(); frame(); }
+  $('#vgaReplay').addEventListener('click', play);
+  $('#vgaSpeed').addEventListener('change', e => speed=+e.target.value);
+  reset(); ctx.putImageData(img,0,0);
+  onVisible(cv, play);
+})();
+
+/* ---------- 03 FIFO ---------- */
+(function(){
+  const DEPTH=8; let q=[], hue=0, over=0, under=0, timer=null, running=true;
+  const cells=$('#cells');
+  for(let i=0;i<DEPTH;i++){ const c=document.createElement('div'); c.className='cell'; cells.appendChild(c); }
+  function render(){
+    [...cells.children].forEach((c,i)=>{
+      if(i<q.length){ c.style.background='hsl('+q[i]+' 80% 60%)'; c.style.borderStyle='solid'; c.textContent=i===0?'head':(i===q.length-1?'tail':''); }
+      else { c.style.background='transparent'; c.style.borderStyle='dashed'; c.textContent=''; }
+    });
+    $('#fEmpty').classList.toggle('on', q.length===0);
+    $('#fFull').classList.toggle('on', q.length===DEPTH);
+    $('#fLvl').textContent='level '+q.length+'/'+DEPTH;
+    $('#fOver').textContent='overflow attempts: '+over;
+    $('#fUnder').textContent='underflow attempts: '+under;
+    $('#fOver').classList.toggle('on', over>0);
+    $('#fUnder').classList.toggle('on', under>0);
+  }
+  function tick(){
+    const wr=+$('#wrRate').value, rd=+$('#rdRate').value;
+    if(Math.random()*100<wr){ if(q.length>=DEPTH) over++; else { q.push(hue); hue=(hue+37)%360; } }
+    if(Math.random()*100<rd){ if(q.length===0) under++; else q.shift(); }
+    render();
+  }
+  function start(){ clearInterval(timer); timer=setInterval(tick,320); running=true; $('#fifoToggle').textContent='Pause'; $('#fifoToggle').classList.add('on'); }
+  function stop(){ clearInterval(timer); running=false; $('#fifoToggle').textContent='Resume'; $('#fifoToggle').classList.remove('on'); }
+  $('#fifoToggle').addEventListener('click', () => running?stop():start());
+  $('#fifoReset').addEventListener('click', () => { q=[]; over=0; under=0; render(); });
+  $('#fifoHigh').addEventListener('click', () => { $('#wrRate').value=95; $('#rdRate').value=10; sync(); });
+  $('#fifoLow').addEventListener('click', () => { $('#wrRate').value=10; $('#rdRate').value=95; sync(); });
+  function sync(){ $('#wrV').textContent=$('#wrRate').value; $('#rdV').textContent=$('#rdRate').value; }
+  $('#wrRate').addEventListener('input', sync); $('#rdRate').addEventListener('input', sync);
+  render(); start();
+})();
+
+/* ---------- 04 color conversion ---------- */
+(function(){
+  const bin=(v,n)=>v.toString(2).padStart(n,'0');
+  function conv(){
+    const hex=$('#cIn').value, fmt=$('#cFmt').value;
+    const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+    let R=r,G=g,B=b, out='';
+    if(fmt==='888'){
+      out='<span class="r">'+bin(r,8)+'</span> <span class="g">'+bin(g,8)+'</span> <span class="b">'+bin(b,8)+'</span>';
+    } else if(fmt==='565'){
+      const r5=r>>3,g6=g>>2,b5=b>>3;
+      R=(r5<<3)|(r5>>2); G=(g6<<2)|(g6>>4); B=(b5<<3)|(b5>>2);
+      out='<span class="r">'+bin(r5,5)+'</span> <span class="g">'+bin(g6,6)+'</span> <span class="b">'+bin(b5,5)+'</span> (16 bits)';
+    } else if(fmt==='444'){
+      const r4=r>>4,g4=g>>4,b4=b>>4;
+      R=r4*17; G=g4*17; B=b4*17;
+      out='<span class="r">'+bin(r4,4)+'</span> <span class="g">'+bin(g4,4)+'</span> <span class="b">'+bin(b4,4)+'</span> (12 bits)';
+    } else {
+      const y=(77*r+150*g+29*b)>>8;
+      R=G=B=y; out='<span class="y">'+bin(y,8)+'</span> (Y = '+y+')';
+    }
+    $('#swIn').style.background='rgb('+r+','+g+','+b+')';
+    $('#swOut').style.background='rgb('+R+','+G+','+B+')';
+    $('#bIn').innerHTML='In: <span class="r">'+bin(r,8)+'</span> <span class="g">'+bin(g,8)+'</span> <span class="b">'+bin(b,8)+'</span><br>R='+r+' G='+g+' B='+b;
+    $('#bOut').innerHTML='Out: '+out+'<br>R='+R+' G='+G+' B='+B;
+    $('#cErr').textContent='Per-channel error: ΔR='+(R-r)+'  ΔG='+(G-g)+'  ΔB='+(B-b);
+  }
+  $('#cIn').addEventListener('input', conv); $('#cFmt').addEventListener('change', conv);
+  conv();
+})();
+
+/* ---------- 05 APB waveform ---------- */
+(function(){
+  const svg=$('#wave'), NS='http://www.w3.org/2000/svg';
+  const LX=100, CW=150, RH=40, TOP=34, N=4;
+  const phases=['IDLE','SETUP','ACCESS','IDLE'];
+  let mode='write', raf=null;
+  function el(t,a,p){ const e=document.createElementNS(NS,t); for(const k in a) e.setAttribute(k,a[k]); (p||svg).appendChild(e); return e; }
+  function signals(w){ return [
+    {n:'PCLK',t:'clk'},
+    {n:'PSEL',t:'bit',v:[0,1,1,0]},
+    {n:'PENABLE',t:'bit',v:[0,0,1,0]},
+    {n:'PWRITE',t:'bit',v:[0,w?1:0,w?1:0,0]},
+    {n:'PADDR',t:'bus',v:[null,'0x08','0x08',null]},
+    {n:w?'PWDATA':'PRDATA',t:'bus',v:w?[null,'0x280','0x280',null]:[null,null,'0x280',null]},
+    {n:'PREADY',t:'bit',v:[0,0,1,0]}
+  ]; }
+  function build(){
+    svg.innerHTML='';
+    const w=mode==='write', sigs=signals(w), H=TOP+sigs.length*RH+10;
+    svg.setAttribute('viewBox','0 0 '+(LX+CW*N+10)+' '+H);
+    const defs=el('defs',{}), cp=el('clipPath',{id:'wclip'},defs);
+    el('rect',{id:'wcr',x:0,y:0,width:0,height:H},cp);
+    for(let i=0;i<N;i++){
+      el('rect',{x:LX+i*CW,y:0,width:CW,height:H,fill:i===1?'#1b2a5e':(i===2?'#2b2a14':'transparent')});
+      const t=el('text',{x:LX+i*CW+CW/2,y:20,fill:i===1?'#8fb1ff':(i===2?'#fbbf24':'#6b7bb0'),'font-size':13,'text-anchor':'middle','font-weight':600}); t.textContent=phases[i];
+    }
+    sigs.forEach((s,r)=>{
+      const yc=TOP+r*RH+RH/2, yh=yc-11, yl=yc+11;
+      const lb=el('text',{x:LX-10,y:yc+4,fill:'#8f9bc0','font-size':13,'text-anchor':'end'}); lb.textContent=s.n;
+      const g=el('g',{'clip-path':'url(#wclip)'});
+      if(s.t==='clk'){
+        let d='M'+LX+' '+yl;
+        for(let i=0;i<N;i++){ const x=LX+i*CW; d+=' L'+x+' '+yh+' L'+(x+CW/2)+' '+yh+' L'+(x+CW/2)+' '+yl+' L'+(x+CW)+' '+yl; }
+        el('path',{d:d,fill:'none',stroke:'#5eead4','stroke-width':2},g);
+      } else if(s.t==='bit'){
+        let d='';
+        s.v.forEach((v,i)=>{ const x=LX+i*CW, y=v?yh:yl; d+=(i?' L'+x+' '+y:'M'+x+' '+y)+' L'+(x+CW)+' '+y; });
+        el('path',{d:d,fill:'none',stroke:'#e6ebff','stroke-width':2},g);
+      } else {
+        let i=0;
+        while(i<N){
+          let j=i; while(j+1<N && s.v[j+1]===s.v[i]) j++;
+          const x0=LX+i*CW, x1=LX+(j+1)*CW;
+          if(s.v[i]===null){ el('line',{x1:x0,y1:yc,x2:x1,y2:yc,stroke:'#4b5688','stroke-width':2,'stroke-dasharray':'4 4'},g); }
+          else {
+            el('path',{d:'M'+(x0+6)+' '+yh+' L'+(x1-6)+' '+yh+' L'+x1+' '+yc+' L'+(x1-6)+' '+yl+' L'+(x0+6)+' '+yl+' L'+x0+' '+yc+'Z',fill:'#18224a',stroke:'#fbbf24','stroke-width':1.8},g);
+            const tx=el('text',{x:(x0+x1)/2,y:yc+4,fill:'#fbbf24','font-size':13,'text-anchor':'middle'},g); tx.textContent=s.v[i];
+          }
+          i=j+1;
+        }
+      }
+    });
+    el('line',{id:'wcur',x1:LX,y1:26,x2:LX,y2:H-4,stroke:'#f472b6','stroke-width':1.5,'stroke-dasharray':'3 3'});
+    return H;
+  }
+  const TEXT={
+    write:['<b>IDLE</b>: bus quiet, PSEL low.','<b>SETUP</b>: master asserts PSEL, drives PADDR, PWDATA and PWRITE=1. PENABLE stays low for one cycle.','<b>ACCESS</b>: PENABLE goes high. The register captures PWDATA when the slave asserts PREADY.','<b>IDLE</b>: transfer complete, PSEL and PENABLE deassert.'],
+    read:['<b>IDLE</b>: bus quiet, PSEL low.','<b>SETUP</b>: master asserts PSEL and drives PADDR with PWRITE=0.','<b>ACCESS</b>: PENABLE goes high. The slave returns PRDATA with PREADY and the master samples it.','<b>IDLE</b>: transfer complete.']
+  };
+  function play(){
+    cancelAnimationFrame(raf);
+    const H=build(), total=CW*N, dur=3600, t0=performance.now();
+    const cr=$('#wcr'), cur=$('#wcur'), txt=$('#apbText');
+    function f(now){
+      const p=Math.min((now-t0)/dur,1), w=p*total;
+      cr.setAttribute('width',LX+w+2);
+      cur.setAttribute('x1',LX+w); cur.setAttribute('x2',LX+w);
+      const ph=Math.min(N-1,Math.floor(w/CW));
+      txt.innerHTML=TEXT[mode][ph];
+      if(p<1) raf=requestAnimationFrame(f); else cur.setAttribute('opacity',0);
+    }
+    raf=requestAnimationFrame(f);
+  }
+  function setMode(m){
+    mode=m; $('#apbW').classList.toggle('on',m==='write'); $('#apbR').classList.toggle('on',m==='read'); play();
+  }
+  $('#apbW').addEventListener('click',()=>setMode('write'));
+  $('#apbR').addEventListener('click',()=>setMode('read'));
+  $('#apbReplay').addEventListener('click',play);
+  build(); $('#wcr').setAttribute('width',9999);
+  onVisible(svg,play);
+})();
+
+/* ---------- 06 verification ---------- */
+(function(){
+  const CODE={
+uvm:`<span class="c">// Sequence: program a display config, then enable</span>
+<span class="k">class</span> cfg_seq <span class="k">extends</span> uvm_sequence #(apb_item);
+  <span class="k">task</span> body();
+    apb_item it = apb_item::type_id::create(<span class="s">"it"</span>);
+    <span class="c">// timing registers</span>
+    start_item(it); it.write = 1; it.addr = <span class="s">'h00</span>; it.data = <span class="s">'h280</span>; finish_item(it);
+    <span class="c">// pixel format</span>
+    start_item(it); it.write = 1; it.addr = <span class="s">'h08</span>; it.data = <span class="s">'h1</span>;   finish_item(it);
+    <span class="c">// enable</span>
+    start_item(it); it.write = 1; it.addr = <span class="s">'h0C</span>; it.data = <span class="s">'h1</span>;   finish_item(it);
+    <span class="c">// read-back check handled by the scoreboard</span>
+  <span class="k">endtask</span>
+<span class="k">endclass</span>`,
+sva:`<span class="c">// FIFO must never overflow or underflow</span>
+a_no_overflow: <span class="k">assert property</span> (@(<span class="k">posedge</span> clk) <span class="k">disable iff</span> (!rst_n)
+  !(fifo_full &amp;&amp; wr_en));
+a_no_underflow: <span class="k">assert property</span> (@(<span class="k">posedge</span> clk) <span class="k">disable iff</span> (!rst_n)
+  !(fifo_empty &amp;&amp; rd_en));
+
+<span class="c">// Hsync pulse lasts exactly HSYNC_W clocks</span>
+a_hsync_width: <span class="k">assert property</span> (@(<span class="k">posedge</span> clk) <span class="k">disable iff</span> (!rst_n)
+  $rose(hsync) |-&gt; hsync [*HSYNC_W] ##1 !hsync);
+
+<span class="c">// APB: PENABLE only follows a SETUP cycle</span>
+a_apb_phase: <span class="k">assert property</span> (@(<span class="k">posedge</span> pclk) <span class="k">disable iff</span> (!presetn)
+  $rose(penable) |-&gt; $past(psel &amp;&amp; !penable));`,
+formal:`<span class="c"># JasperGold: prove properties for all reachable states</span>
+clear -all
+analyze -sv12 rtl/*.sv sva/*.sv
+elaborate -top display_top
+clock clk
+reset -expression {!rst_n}
+prove -all
+report -summary
+
+<span class="c"># Outcomes to expect per property:</span>
+<span class="c">#   proven    - holds for all inputs, no counterexample exists</span>
+<span class="c">#   cex       - waveform showing how it fails</span>
+<span class="c">#   bounded   - no failure up to depth N, not a full proof</span>`,
+py:`<span class="k">import</span> re, sys, collections
+
+counts = collections.Counter()
+<span class="k">for</span> line <span class="k">in</span> open(sys.argv[<span class="s">1</span>]):
+    m = re.search(<span class="s">r"(UVM_(?:INFO|WARNING|ERROR|FATAL))"</span>, line)
+    <span class="k">if</span> m:
+        counts[m.group(<span class="s">1</span>)] += <span class="s">1</span>
+
+print(dict(counts))
+<span class="k">if</span> counts[<span class="s">"UVM_ERROR"</span>] <span class="k">or</span> counts[<span class="s">"UVM_FATAL"</span>]:
+    sys.exit(<span class="s">1</span>)  <span class="c"># fail the regression</span>`
+  };
+  function show(t){
+    $$('#vtabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+    $('#vcode').innerHTML=CODE[t];
+  }
+  $$('#vtabs button').forEach(b=>b.addEventListener('click',()=>show(b.dataset.t)));
+  show('uvm');
+})();
+</script>
+</body>
+</html>
